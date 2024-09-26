@@ -43,6 +43,11 @@ def get_dataLoader(data_dir):
     }
     return dataloaders
 
+def create_pre_train_model(arch, hidden_units, num_classes):
+    """
+    Create pre-train model based on architecture, only support for vgg or resnet
+    """
+
 
 def set_device(gpu_enable=True):
     """
@@ -57,9 +62,26 @@ def set_device(gpu_enable=True):
     return device
 
 def run(data_dir, save_dir, arch, learning_rate, hidden_units, epochs, gpu):
-    print("abc")
+    # 1. Load and transform data
+    print("1. Load and transform data")
+    dataloaders = get_dataLoader()
+    num_classes = len(dataloaders['train'].classes)
+    print("Number of classes: ", num_classes)
+    
+    # 2. Create pre-train model
+    model = create_pre_train_model(arch, hidden_units, num_classes)
 
-argsSettings = [
+def debug_print_args(data_dir, save_dir, arch, learning_rate, hidden_units, epochs, gpu):
+    print("{:<23}: {}".format("Data directory ", data_dir))
+    print("{:<23}: {}".format("Check point directory ", save_dir))
+    print("{:<23}: {}".format("Model architecture ", arch))
+    print("{:<23}: {}".format("Learning rate ", learning_rate))
+    print("{:<23}: {}".format("Hidden units ", hidden_units))
+    print("{:<23}: {}".format("Epochs ", epochs))
+    print("{:<23}: {:}".format("Gpu support ", gpu))
+
+def get_args():
+    argsSettings = [
     {
         "name": "data_directory",
         "required": True,
@@ -75,8 +97,8 @@ argsSettings = [
     {
         "name": "arch",
         "required": False,
-        "help": "Archirect of the model: vgg16, or vgg13",
-        "default": "vgg16"
+        "help": "Archirect of the model: vgg, or resnet",
+        "default": "vgg"
     },
     {
         "name": "learning_rate",
@@ -102,9 +124,8 @@ argsSettings = [
         "help": "Try to use GPU for faster trainning or not",
         "default": True
     },
-]
-
-if __name__ == "__main__":
+    ]
+    
     # Extract all keys
     argNames = [arg['name'] for arg in argsSettings]
     ap = argparse.ArgumentParser("Train a neural network on a dataset")
@@ -125,17 +146,25 @@ if __name__ == "__main__":
                 default=arg['default']
             )
     args = vars(ap.parse_args())
-
     # Getting all variables at a same times
-    data_dir, save_dir, arch, learning_rate, hidden_units, epochs, gpu = (args[k] for k in argNames)
+    return (args[k] for k in argNames)
 
-    # show value for debug
-    print("data_dir: ", data_dir)
-    print("save_dir: ", save_dir)
-    print("arch: ", arch)
-    print("learning_rate: ", learning_rate)
-    print("hidden_units: ", hidden_units)
-    print("epochs: ", epochs)
-    print("gpu: ", gpu)
+if __name__ == "__main__":
+    
+    data_dir, save_dir, arch, learning_rate, hidden_units, epochs, gpu = get_args()
+
+    if(arch not in ['vgg', 'resnet']):
+        print(f'This app does not support "{arch}" architect')
+        exit()
+        
+    # DEBUG
+    debug_print_args(data_dir, save_dir, arch, learning_rate, hidden_units, epochs, gpu)
+    
+
+    
+    
+    
+    
+    
 
 

@@ -21,21 +21,23 @@ HIDDEN_UNITS = 4069
 EPOCHES = 5
 MY_FAV_CLASS = [1, 2, 10, 15, 20, 22, 63, 64, 90, 92]
 BATCH_SIZE = 64 # Choose same value as 5.10 lesson
+MEAN = [0.485, 0.456, 0.406]
+STD = [0.229, 0.224, 0.225]
 
 cat_to_name_file = os.path.join('.', 'cat_to_name.json')
 
 with open(cat_to_name_file, 'r') as f:
     cat_to_name = json.load(f)
-print(len(cat_to_name)) # It should be 102 at the original
 
 if(len(cat_to_name) != len(MY_FAV_CLASS)):
+    print("Number of classes before change:", len(cat_to_name)) # It should be 102 at the original
     # I only want to keep my_fav_class class only
     cat_to_name = {key: value for key, value in cat_to_name.items() if int(key) in MY_FAV_CLASS}
-    print(len(cat_to_name))  # Should be 10 now
+    print("Number of classes after change:", len(cat_to_name))  # Should be 10 now
     with open(cat_to_name_file, 'w') as json_file:
         json.dump(cat_to_name, json_file, indent=4)
 
-output_size = len(cat_to_name)
+OUTPUT_SIZE = len(cat_to_name)
 
 def imshow(image, ax=None, title=None):
     """Imshow for Tensor."""
@@ -47,8 +49,8 @@ def imshow(image, ax=None, title=None):
     image = image.numpy().transpose((1, 2, 0))
     
     # Undo preprocessing
-    mean = np.array([0.485, 0.456, 0.406])
-    std = np.array([0.229, 0.224, 0.225])
+    mean = np.array(MEAN)
+    std = np.array(STD)
     image = std * image + mean
     
     # Image needs to be clipped between 0 and 1 or it looks like noise when displayed
@@ -68,7 +70,7 @@ def process_image(image_path):
         transforms.Resize(256),             # Resize the image to 256x256
         transforms.CenterCrop(224),         # Crop the center of the image to 224x224
         transforms.ToTensor(),              # Convert the image to a tensor
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # Normalize the image
+        transforms.Normalize(mean=MEAN, std=STD)  # Normalize the image
     ])
     # Load the image
     image = Image.open(image_path)
