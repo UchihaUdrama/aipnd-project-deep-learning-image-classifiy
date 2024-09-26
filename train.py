@@ -1,17 +1,141 @@
 from utils import *
 
-# some contrains
-input_size = 25088
-path_to_checkpoint = os.path.join('.','checkpoint2.pth')
-learning_rate = 0.001
+def get_dataLoader(data_dir):
+    train_dir = os.path.join(data_dir, 'train')
+    valid_dir = os.path.join(data_dir, 'valid')
+    test_dir = os.path.join(data_dir, 'test')
+    # Apply transformations in pipeline: Rando scaling, cropping, and flipping
+    train_transforms = transforms.Compose([
+        # Randomly crop and resize to 224x224
+        transforms.RandomResizedCrop(224),
+        transforms.RandomHorizontalFlip(),      # Randomly flip the image horizontally
+        transforms.ToTensor(),                  # Convert the image to a tensor
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[
+                             0.229, 0.224, 0.225])  # Normalize with ImageNet stats
+    ])
+    # No need to scaling or rotate for validation, and testing data but we want the data have the same size 224x224
+    valid_test_transforms = transforms.Compose([
+        # Resize the image to 256x256, a common used value
+        transforms.Resize(256),
+        # Center crop to 224x224, this is mandatory because our train data using this size
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),                  # Convert the image to a tensor
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[
+                             0.229, 0.224, 0.225])  # Normalize with ImageNet stats
+    ])
+    # Load the datasets with ImageFolder
+    # Result is dictionary with key are train, valid, or test.
+    # Value are 3 ImageFolder objects from torchvision.datasets
+    image_datasets = {
+        'train': datasets.ImageFolder(root=train_dir, transform=train_transforms),
+        'valid': datasets.ImageFolder(root=valid_dir, transform=valid_test_transforms),
+        'test': datasets.ImageFolder(root=test_dir, transform=valid_test_transforms),
+    }
+
+    # Using the image datasets and the trainforms, define the dataloaders
+    # Result is dictionary with key are train, valid, or test.
+    # Value are 3 DataLoader objects from torch.utils.data
+    dataloaders = {
+        # Train data should be shuffle
+        'train': torch.utils.data.DataLoader(image_datasets['train'], batch_size=BATCH_SIZE, shuffle=True),
+        'valid': torch.utils.data.DataLoader(image_datasets['valid'], batch_size=BATCH_SIZE, shuffle=False),
+        'test': torch.utils.data.DataLoader(image_datasets['test'], batch_size=BATCH_SIZE, shuffle=False)
+    }
+    return dataloaders
+
+
+def set_device(gpu_enable=True):
+    """
+    Enable gpu if supported
+    """
+    if gpu_enable and torch.cuda.is_available():
+        device = torch.device("cuda")
+        print("CUDA is available. Using GPU.")
+    else:
+        device = torch.device("cpu")
+        print("CUDA is not available. Using CPU.")
+    return device
+
+def run(data_dir, save_dir, arch, learning_rate, hidden_units, epochs, gpu):
+    print("abc")
+
+argsSettings = [
+    {
+        "name": "data_directory",
+        "required": True,
+        "help": "Image directory",
+        "default": None
+    },
+    {
+        "name": "save_dir",
+        "required": False,
+        "help": "Image directory",
+        "default": PATH_TO_CHECKPOINT
+    },
+    {
+        "name": "arch",
+        "required": False,
+        "help": "Archirect of the model: vgg16, or vgg13",
+        "default": "vgg16"
+    },
+    {
+        "name": "learning_rate",
+        "required": False,
+        "help": "Image directory",
+        "default": LEARNING_RATE
+    },
+    {
+        "name": "hidden_units",
+        "required": False,
+        "help": "Hidden units",
+        "default": HIDDEN_UNITS
+    },
+    {
+        "name": "epochs",
+        "required": False,
+        "help": "Set the number of epochs",
+        "default": EPOCHES
+    },
+    {
+        "name": "gpu",
+        "required": False,
+        "help": "Try to use GPU for faster trainning or not",
+        "default": True
+    },
+]
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("-i", "--input", required=True,help="path to image directories")
-    ap.add_argument("-s", "--save_dir", required=False,help="Set directory to save checkpoints")
-    ap.add_argument("-a", "--arch", required=False,help="Choose architecture")  
-    ap.add_argument("-lr", "--learning_rate", required=False,help="Set learning_rate" ,type=float)
-    ap.add_argument("-hd", "--hidden_units", required=False,help="Set hidden_units" ,type=int)
-    ap.add_argument("-ep", "--epochs", required=False,help="Set epochs",type=int)
-    ap.add_argument("-gp", "--gpu", required=False,help="Set device")
+    # Extract all keys
+    argNames = [arg['name'] for arg in argsSettings]
+    ap = argparse.ArgumentParser("Train a neural network on a dataset")
+    # Add arguments base on settings
+    for arg in argsSettings:
+        if arg['required']:
+            # No need -- in the argName and no need required param
+            ap.add_argument(
+                arg['name'],
+                help=arg['help'],
+                default=arg['default']
+            )
+        else:
+            ap.add_argument(
+                f"--{arg['name']}",
+                required=arg['required'],
+                help=arg['help'],
+                default=arg['default']
+            )
     args = vars(ap.parse_args())
+
+    # Getting all variables at a same times
+    data_dir, save_dir, arch, learning_rate, hidden_units, epochs, gpu = (args[k] for k in argNames)
+
+    # show value for debug
+    print("data_dir: ", data_dir)
+    print("save_dir: ", save_dir)
+    print("arch: ", arch)
+    print("learning_rate: ", learning_rate)
+    print("hidden_units: ", hidden_units)
+    print("epochs: ", epochs)
+    print("gpu: ", gpu)
+
+

@@ -14,23 +14,13 @@ from PIL import Image
 from torchvision import datasets, transforms, models
 
 # some contrains
-input_size = 25088
-path_to_checkpoint = os.path.join('.','checkpoint.pth')
-learning_rate = 0.001
-my_fav_class = [1, 2, 10, 15, 20, 22, 63, 64, 90, 92]
-batch_size = 64 # Choose same value as 5.10 lesson
-
-data_dir = os.path.join('.', 'flowers')
-train_dir = os.path.join(data_dir, 'train')
-valid_dir = os.path.join(data_dir, 'valid')
-test_dir = os.path.join(data_dir, 'test')
-
-if torch.cuda.is_available():
-    device = torch.device("cuda")
-    print("CUDA is available. Using GPU.")
-else:
-    device = torch.device("cpu")
-    print("CUDA is not available. Using CPU.")
+INPUT_SIZE = 25088
+PATH_TO_CHECKPOINT = os.path.join('.', 'checkpoint.pth')
+LEARNING_RATE = 0.001
+HIDDEN_UNITS = 4069
+EPOCHES = 5
+MY_FAV_CLASS = [1, 2, 10, 15, 20, 22, 63, 64, 90, 92]
+BATCH_SIZE = 64 # Choose same value as 5.10 lesson
 
 cat_to_name_file = os.path.join('.', 'cat_to_name.json')
 
@@ -38,9 +28,9 @@ with open(cat_to_name_file, 'r') as f:
     cat_to_name = json.load(f)
 print(len(cat_to_name)) # It should be 102 at the original
 
-if(len(cat_to_name) != len(my_fav_class)):
+if(len(cat_to_name) != len(MY_FAV_CLASS)):
     # I only want to keep my_fav_class class only
-    cat_to_name = {key: value for key, value in cat_to_name.items() if int(key) in my_fav_class}
+    cat_to_name = {key: value for key, value in cat_to_name.items() if int(key) in MY_FAV_CLASS}
     print(len(cat_to_name))  # Should be 10 now
     with open(cat_to_name_file, 'w') as json_file:
         json.dump(cat_to_name, json_file, indent=4)
