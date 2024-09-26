@@ -5,17 +5,21 @@ import os
 import shutil
 import torch                        # Using tensor and its operation for deep learning
 import torch.optim as optim
+import torch.nn as nn
 import torch.nn.functional as F
 import torchvision                  # Image processing and pre-training the models
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 import json
 from PIL import Image
 from torchvision import datasets, transforms, models
+from torchvision.models import VGG16_Weights, ResNet34_Weights
+from torch.optim.lr_scheduler import StepLR
 
 # some contrains
 INPUT_SIZE = 25088
-PATH_TO_CHECKPOINT = os.path.join('.', 'checkpoint.pth')
+PATH_TO_CHECKPOINT = os.path.join('.')
 LEARNING_RATE = 0.001
 HIDDEN_UNITS = 4069
 EPOCHES = 5
@@ -78,3 +82,56 @@ def process_image(image_path):
      # Apply the transformations
     image_tensor = preprocess(image)
     return image_tensor
+
+def set_device(gpu_enable=True):
+    """
+    Enable gpu if supported
+    """
+    if gpu_enable and torch.cuda.is_available():
+        device = torch.device("cuda")
+        print("CUDA is available. Using GPU.")
+    else:
+        device = torch.device("cpu")
+        print("CUDA is not available. Using CPU.")
+    return device
+
+def create_pre_train_model(arch, hidden_units, num_classes):
+    """
+    Create pre-train model based on architecture, only support for vgg or resnet
+    """
+    if arch == "vgg":
+        # Load the pre-trained model
+        model = models.vgg16(weights=VGG16_Weights.IMAGENET1K_V1)
+        num_ftrs = model.classifier[0].in_features
+        # Make sure parameters are frozen (during training, the weights of the pretrained layers will not be updated.)
+        for param in model.parameters():
+            param.requires_grad = False
+        # Create the feedforward classifier using nn.Sequential
+        model.classifier = nn.Sequential(
+            nn.Linear(num_ftrs, hidden_units),          # First fully connected layer
+            nn.ReLU(),                                  # Activation function
+            nn.Dropout(p=0.5),                          # Dropout layer for regularization
+            nn.Linear(hidden_units, hidden_units),      # Second fully connected layer
+            nn.ReLU(),                                  # Activation function
+            nn.Dropout(p=0.5),                          # Dropout layer for regularization
+            nn.Linear(hidden_units, num_classes)        # Output layer
+    )
+    else:
+        # Load the pre-trained ResNet34 model
+        model = models.resnet34(weights=ResNet34_Weights.DEFAULT)
+        # Make sure parameters are frozen (during training, the weights of the pretrained layers will not be updated.)
+        for param in model.parameters():
+            param.requires_grad = False
+            
+        # Modify the final layer to match the number of classes in your dataset
+        model.fc = nn.Sequential(
+            nn.Linear(model.fc.in_features, HIDDEN_UNITS),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(HIDDEN_UNITS, int(HIDDEN_UNITS/2)),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(int(HIDDEN_UNITS/2), num_classes)  # Output layer
+        )
+    
+    return model

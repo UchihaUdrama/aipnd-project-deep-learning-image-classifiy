@@ -1,6 +1,14 @@
 from utils import *
 
 def get_dataLoader(data_dir):
+    """
+    Based on the data_dir (data directory), doing trainsformation and get the DataLoader
+    
+    Return:
+        dataloaders: holding all data
+        num_classes: number of classes from train data
+        class_to_idx: mapping between classes and the index of it
+    """
     train_dir = os.path.join(data_dir, 'train')
     valid_dir = os.path.join(data_dir, 'valid')
     test_dir = os.path.join(data_dir, 'test')
@@ -10,8 +18,7 @@ def get_dataLoader(data_dir):
         transforms.RandomResizedCrop(224),
         transforms.RandomHorizontalFlip(),      # Randomly flip the image horizontally
         transforms.ToTensor(),                  # Convert the image to a tensor
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[
-                             0.229, 0.224, 0.225])  # Normalize with ImageNet stats
+        transforms.Normalize(mean=MEAN, std=STD)  # Normalize with ImageNet stats
     ])
     # No need to scaling or rotate for validation, and testing data but we want the data have the same size 224x224
     valid_test_transforms = transforms.Compose([
@@ -20,8 +27,7 @@ def get_dataLoader(data_dir):
         # Center crop to 224x224, this is mandatory because our train data using this size
         transforms.CenterCrop(224),
         transforms.ToTensor(),                  # Convert the image to a tensor
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[
-                             0.229, 0.224, 0.225])  # Normalize with ImageNet stats
+        transforms.Normalize(mean=MEAN, std=STD)  # Normalize with ImageNet stats
     ])
     # Load the datasets with ImageFolder
     # Result is dictionary with key are train, valid, or test.
@@ -41,35 +47,7 @@ def get_dataLoader(data_dir):
         'valid': torch.utils.data.DataLoader(image_datasets['valid'], batch_size=BATCH_SIZE, shuffle=False),
         'test': torch.utils.data.DataLoader(image_datasets['test'], batch_size=BATCH_SIZE, shuffle=False)
     }
-    return dataloaders
-
-def create_pre_train_model(arch, hidden_units, num_classes):
-    """
-    Create pre-train model based on architecture, only support for vgg or resnet
-    """
-
-
-def set_device(gpu_enable=True):
-    """
-    Enable gpu if supported
-    """
-    if gpu_enable and torch.cuda.is_available():
-        device = torch.device("cuda")
-        print("CUDA is available. Using GPU.")
-    else:
-        device = torch.device("cpu")
-        print("CUDA is not available. Using CPU.")
-    return device
-
-def run(data_dir, save_dir, arch, learning_rate, hidden_units, epochs, gpu):
-    # 1. Load and transform data
-    print("1. Load and transform data")
-    dataloaders = get_dataLoader()
-    num_classes = len(dataloaders['train'].classes)
-    print("Number of classes: ", num_classes)
-    
-    # 2. Create pre-train model
-    model = create_pre_train_model(arch, hidden_units, num_classes)
+    return dataloaders, image_datasets['train'].class_to_idx
 
 def debug_print_args(data_dir, save_dir, arch, learning_rate, hidden_units, epochs, gpu):
     print("{:<23}: {}".format("Data directory ", data_dir))
@@ -149,16 +127,139 @@ def get_args():
     # Getting all variables at a same times
     return (args[k] for k in argNames)
 
-if __name__ == "__main__":
+def save_checkpoint(model, path_to_checkpoint, epochs, class_to_idx, optimizer, arch, hidden_units):
+    """
+    Save the checkpoint into path_to_checkpoint
+    """
     
-    data_dir, save_dir, arch, learning_rate, hidden_units, epochs, gpu = get_args()
+    model.class_to_idx = class_to_idx
+    
+    # Create the checkpoint dictionary
+    checkpoint = {
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'class_to_idx' : model.class_to_idx,
+        'epochs': epochs,
+        'arch': arch,
+        'hidden_units': hidden_units
+    }
 
+    # print(checkpoint)
+
+    # Save the checkpoint
+    torch.save(checkpoint, path_to_checkpoint)
+
+    print(f"Checkpoint {path_to_checkpoint} saved successfully!")
+
+def test_model(model, device, dataloaders):
+    """
+    Testing the model with input dataloaders
+    """
+    model.eval()  # Set the model to evaluation mode
+
+    correct = 0
+    total = 0
+
+    with torch.no_grad():  # Disable gradient calculation
+        for imgs, labels in dataloaders['test']:
+            imgs, labels = imgs.to(device), labels.to(device)
+            outputs = model(imgs)  # Get model predictions
+            probabilities = F.softmax(outputs, dim=1)  # Apply softmax to get probabilities
+            _, predicted = torch.max(probabilities, 1)  # Get the predicted class
+            total += labels.size(0)  # Count total samples
+            correct += (predicted == labels).sum().item()  # Count correct predictions
+
+    accuracy = correct / total  # Calculate accuracy
+    print(f'Test Accuracy: {accuracy * 100:.2f}%')
+    return accuracy
+
+def train(model, device, dataloaders, learning_rate, epochs, arch):
+    """
+    Train the model
+    """
+    # Define the loss function and optimizer
+    criterion = nn.CrossEntropyLoss()
+    if arch == 'vgg':
+        optimizer = optim.Adam(model.classifier.parameters(), lr=learning_rate)
+        scheduler = None
+    elif arch == 'resnet':
+        optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+        scheduler = StepLR(optimizer, step_size=10, gamma=0.1)
+    
+    validation_loss = 0.0
+    model = model.to(device)
+    begin = time.time()
+    num_epochs = epochs
+    for epoch in range(num_epochs):
+        model.train()
+        running_loss = 0.0
+        for imgs, labels in dataloaders['train']:
+            imgs, labels = imgs.to(device), labels.to(device)       # Move data to GPU
+            optimizer.zero_grad()                                   # Clear the gradients 
+            outputs = model(imgs)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+            running_loss += loss.item()
+
+        if arch == 'resnet':
+            scheduler.step()
+        print(f"Epoch {epoch+1}/{num_epochs}")
+
+        # Validation loop (optional)
+        model.eval()
+        valid_loss = 0.0
+        with torch.no_grad():
+            for imgs, labels in dataloaders['valid']:
+                imgs, labels = imgs.to(device), labels.to(device)  # Move data to GPU
+                outputs = model(imgs)
+                loss = criterion(outputs, labels)
+                valid_loss += loss.item()
+        label_width = max(len('Training Loss:'), len('Validation Loss:')) + 1
+        print(f"{'Training Loss:':<{label_width}} {(running_loss/len(dataloaders['train'])):.4f}")
+        validation_loss = valid_loss/len(dataloaders['valid'])
+        print(f"{'Validation Loss:':<{label_width}} {validation_loss:.4f}")
+        print('-' * 50)
+    time_elapsed = time.time() - begin
+    print(f'Training completed after {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s')
+    return optimizer, validation_loss
+
+def run(data_dir, save_dir, arch, learning_rate, hidden_units, epochs, gpu):
+    print('#'*25, "MAIN LOGIC", '#'*25)
+    # 1. Load and transform data
+    print("1. Load and transform data")
+    dataloaders, class_to_idx = get_dataLoader(data_dir)
+    print("Number of classes: ", len(class_to_idx))
+    
+    #2. Create pre-train model
+    print("2. Create pre-train model based on {arch} architecture")
+    model = create_pre_train_model(arch, hidden_units, len(class_to_idx))
+    device = set_device(gpu)
+    
+    # 3. Train model
+    print("3. Train model")
+    optimizer, validation_loss = train(model, device, dataloaders, learning_rate, int(epochs), arch)
+    
+    # 4. Test the result
+    print("4. Test the result")
+    accuracy = test_model(model, device, dataloaders)
+    
+    # 5. Save the checkpoint
+    print("5. Save the checkpoint")
+    path_to_checkpoint = os.path.join(save_dir, "checkpoint.pth")
+    save_checkpoint(model, path_to_checkpoint, epochs, class_to_idx, optimizer, validation_loss, accuracy)
+
+if __name__ == "__main__":
+    # Parse the input arguments
+    data_dir, save_dir, arch, learning_rate, hidden_units, epochs, gpu = get_args()
     if(arch not in ['vgg', 'resnet']):
         print(f'This app does not support "{arch}" architect')
         exit()
         
     # DEBUG
     debug_print_args(data_dir, save_dir, arch, learning_rate, hidden_units, epochs, gpu)
+    # Run the main logic based on args
+    run(data_dir, save_dir, arch, learning_rate, hidden_units, epochs, gpu)
     
 
     
