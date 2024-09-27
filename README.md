@@ -12,7 +12,7 @@ flowers: contains images group into predict, train, valid, test purpose
 |--- train: contain images labled in classId
 |--- valid: contain images labled in classId
 cat_to_name.json: which map the classId to the actual flowers name
-checkpoint.pth: checkpoint (my last test using resnet with 50 epochs, accuracy rate is 93%) ~120 MB
+checkpoint.pth: checkpoint should be generate after train.py is run
 CODEOWNERS: default provide by Udacity
 Image Classifier Project.html: html export version of my notebook
 Image Classifier Project.ipynb: my notebook
@@ -64,16 +64,20 @@ python train.py -h
 ```
 python train.py flowers --arch resnet --epochs 50
 ```
+Or with other architecture
+```
+python train.py flowers --arch vgg --epochs 5
+```
 
-## Example of use:
+## For predict.py
 - Load default 'checkpoint.pth' file at same directory with the train.py file.
 - Using the default cat_to_name.json file which map the classId to the actual flowers name
 
 ```
-python train.py flowers --arch resnet --epochs 50
+python predict.py flowers/predict/scarlet-beebalm.jpg checkpoint
 ```
 Or using other architecture (Make sure you run that same architure first with the train.py)
 
 ```
-python train.py flowers --arch vgg --epochs 5
+python predict.py flowers/predict/unknow-lily.jpg checkpoint
 ```
