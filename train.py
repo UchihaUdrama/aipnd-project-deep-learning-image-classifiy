@@ -127,19 +127,14 @@ def get_args():
     # Getting all variables at a same times
     return (args[k] for k in argNames)
 
-def save_checkpoint(model, path_to_checkpoint, epochs, class_to_idx, optimizer, arch, hidden_units):
+def save_checkpoint(model, path_to_checkpoint, class_to_idx, arch, hidden_units):
     """
     Save the checkpoint into path_to_checkpoint
     """
-    
-    model.class_to_idx = class_to_idx
-    
     # Create the checkpoint dictionary
     checkpoint = {
         'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'class_to_idx' : model.class_to_idx,
-        'epochs': epochs,
+        'class_to_idx' : class_to_idx,
         'arch': arch,
         'hidden_units': hidden_units
     }
@@ -247,7 +242,7 @@ def run(data_dir, save_dir, arch, learning_rate, hidden_units, epochs, gpu):
     # 5. Save the checkpoint
     print("5. Save the checkpoint")
     path_to_checkpoint = os.path.join(save_dir, "checkpoint.pth")
-    save_checkpoint(model, path_to_checkpoint, epochs, class_to_idx, optimizer, validation_loss, accuracy)
+    save_checkpoint(model, path_to_checkpoint, class_to_idx, arch, hidden_units)
 
 if __name__ == "__main__":
     # Parse the input arguments

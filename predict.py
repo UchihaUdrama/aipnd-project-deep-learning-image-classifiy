@@ -1,8 +1,10 @@
 from utils import *
 
-def load_checkpoint(checkpoint):
-    
-    path_to_checkpoint = os.path.join('.', f'{checkpoint}.pth',)
+def load_checkpoint(checkpoint_name, device):
+    """
+    Load the check point and return the model so we could use to predict
+    """
+    path_to_checkpoint = os.path.join('.', f'{checkpoint_name}.pth',)
     
     # Load the checkpoint
     checkpoint = torch.load(path_to_checkpoint)
@@ -10,38 +12,15 @@ def load_checkpoint(checkpoint):
     arch = checkpoint['arch']
     class_to_idx = checkpoint['class_to_idx']
     hidden_units = len(class_to_idx)
+    
+    # Create model again from the architecture, hidden_units, and num_classes
     model = create_pre_train_model(arch, hidden_units, len(class_to_idx))
 
-    # Load the pre-trained model
-    model_loaded = models.vgg16(weights=VGG16_Weights.IMAGENET1K_V1)
-    # Make sure parameters are frozen (during training, the weights of the pretrained layers will not be updated.)
-    for param in model.parameters():
-        param.requires_grad = False
-
-    # Recreate the model architecture using nn.Sequential
-    model_loaded.classifier = nn.Sequential(
-        nn.Linear(input_size, 4096),            # First fully connected layer
-        nn.ReLU(),                              # Activation function
-        nn.Dropout(p=0.5),                      # Dropout layer for regularization
-        nn.Linear(4096, 4096),                  # Second fully connected layer
-        nn.ReLU(),                              # Activation function
-        nn.Dropout(p=0.5),                      # Dropout layer for regularization
-        nn.Linear(4096, output_size)            # Output layer
-    )
-
-    # Load everything from the checkpint to loaded model
-    model_loaded.load_state_dict(checkpoint['model_state_dict'])
-    model_loaded.to(device)
-    optimizer_loaded = optim.Adam(model.classifier.parameters(), lr=learning_rate)
-    optimizer_loaded.load_state_dict(checkpoint['optimizer_state_dict'])
-    num_epochs = checkpoint['epoch']
-    validation_loss = checkpoint['validation_loss']
-    class_to_idx = checkpoint['class_to_idx']
-    accuracy = checkpoint['test_accuracy']
-
-    print(f"Checkpoint loaded {path_to_checkpoint}")
-    print(f"Epoch {num_epochs}, Validation Loss: {validation_loss:.2f}, Test Accuracy: {accuracy * 100:.2f}%")
-    print("class_to_idx:", class_to_idx)
+    # Load everything from the checkpoint to loaded model
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.to(device)
+    print(f'Load model "{arch}" success from "{path_to_checkpoint}"')
+    return model, class_to_idx
 
 def get_args():
     argsSettings = [
@@ -100,18 +79,64 @@ def get_args():
     # Getting all variables at a same times
     return (args[k] for k in argNames)
 
-def run(image_path, checkpoint, top_k, category_names, gpu):
-    model = load_checkpoint(checkpoint)
+def predict(image_path, model, class_to_idx, top_k, category_names, device):
+    """
+    Use the model to display top_k classes of loaded images from image_path, 
+    with all classes from category_names file.
+    """
+    top_k = int(top_k)
+    
+    # Load cat_to_name
+    cat_to_name_file = os.path.join('.', category_names)
+
+    with open(cat_to_name_file, 'r') as f:
+        cat_to_name = json.load(f)
+    
+    # Process the image
+    image_tensor = process_image(image_path)
+    
+    # Add a batch dimension ([3, 224, 224] -> [1, 3, 224, 224], because PyTorch expect input data = [batch_size, channels, height, width])
+    image_tensor = image_tensor.unsqueeze(0)
+
+    # Move the image tensor to the same device as the model
+    image_tensor = image_tensor.to(device)
+
+    # Set the model to evaluation mode and turn off gradients
+    model.to(device)
+    model.eval()
+
+    with torch.no_grad():
+        # Forward pass
+        output = model(image_tensor)
+        # Get the probabilities
+        probabilities = torch.nn.functional.softmax(output[0], dim=0)
+        
+        # Get the topk probabilities and indices
+        topk_probs, topk_indices = probabilities.topk(top_k)
+              
+        # Convert indices to class 
+        idx_to_class = {v: k for k, v in class_to_idx.items()}
+        top_classes = [cat_to_name[idx_to_class[idx.item()]] for idx in topk_indices]
+
+        # Move probabilities back to CPU for numpy conversion
+        topk_probs = topk_probs.cpu().numpy()
+        
+    return topk_probs, top_classes
+
+def run(image_path, checkpoint, top_k, category_names, gpu):  
     device  = set_device(gpu)
-    tensor = process_image(image_path,device)
-    probs, class_names = predict(image_path, model, top_k,cat_to_name,device)
-    console_display(image_path,probs,class_names,cat_to_name,device)
+    model, class_to_idx = load_checkpoint(checkpoint, device)
+    top_probs, top_classes = predict(image_path, model, class_to_idx, top_k, category_names, device)
+    # Display results
+    for i in range(len(top_probs)):
+        print(f"Class: {top_classes[i]:<3}, Probability: {(top_probs[i] * 100):>6.2f}%")
+    return None
 
 
 def debug_print_args(image_path, checkpoint, top_k, category_names, gpu):
     print("{:<23}: {}".format("Path to image ", image_path))
     print("{:<23}: {}".format("Check point filename ", checkpoint))
-    print("{:<23}: {}".format("Number of top class to show ", top_k))
+    print("{:<23}: {}".format("Number of top class ", top_k))
     print("{:<23}: {}".format("Name of category file ", category_names))
     print("{:<23}: {:}".format("Gpu support ", gpu))
 
